@@ -55,6 +55,8 @@ Running a git diff then will help to see any differences`,
 	},
 }
 
+var shouldPackage bool
+
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
