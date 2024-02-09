@@ -37,7 +37,7 @@ type repo struct {
 	kind string
 }
 
-func GetAllCharts(config cfg.Config, configPath string) error {
+func GetAllCharts(config cfg.Config, configPath string, shouldPackage bool) error {
 	// Move to folder path to correctly manage non absolute paths
 	filenamePath, _ := filepath.Abs(configPath)
 	absolutePath, _ := filepath.Split(filenamePath)
@@ -82,12 +82,12 @@ func GetAllCharts(config cfg.Config, configPath string) error {
 		}
 
 		if chartType == "chart" {
-			err = getHelmChart(chart, destinations)
+			err = getHelmChart(chart, destinations, shouldPackage)
 			if err != nil {
 				return err
 			}
 		} else if chartType == "git" {
-			err = getGitChart(chart, destinations, repos)
+			err = getGitChart(chart, destinations, repos, shouldPackage)
 			if err != nil {
 				return err
 			}
@@ -99,7 +99,7 @@ func GetAllCharts(config cfg.Config, configPath string) error {
 	return nil
 }
 
-func getHelmChart(chart map[string]string, destinations map[string]string) error {
+func getHelmChart(chart map[string]string, destinations map[string]string, shouldPackage bool) error {
 	// set default values
 	chartUrl := "stable/" + chart["name"]
 	destinationFolder := destinations["default"]
@@ -142,7 +142,7 @@ func getHelmChart(chart map[string]string, destinations map[string]string) error
 		}
 	}
 
-	err = helmDownload(chart["name"], chartUrl, chart["version"], destinationFolder, destOverride)
+	err = helmDownload(chart["name"], chartUrl, chart["version"], destinationFolder, destOverride, shouldPackage)
 	if err != nil {
 		if chartExists {
 			// restore old chart on failure
@@ -162,7 +162,7 @@ func getHelmChart(chart map[string]string, destinations map[string]string) error
 	return nil
 }
 
-func getGitChart(chart map[string]string, destinations map[string]string, repos []repo) error {
+func getGitChart(chart map[string]string, destinations map[string]string, repos []repo, shouldPackage bool) error {
 	// set default values
 	chartName := chart["name"]
 	chartUrl := ""
@@ -232,6 +232,18 @@ func getGitChart(chart map[string]string, destinations map[string]string, repos 
 		return err
 	}
 
+	if shouldPackage {
+		packageCmd := exec.Command("helm", "package", chartFolderDestName, "-d", destinationFolder)
+		packageOut, err := packageCmd.CombinedOutput()
+		if err != nil {
+			return errors.New("Error packaging chart: " + string(packageOut))
+		}
+		err = os.RemoveAll(chartFolderDestName)
+		if err != nil {
+			return errors.New("Error removing unpackaged chart directory: " + err.Error())
+		}
+	}
+
 	// finally remove the old chart
 	if chartExists {
 		err = os.RemoveAll(oldChartFolderDestName)
@@ -273,7 +285,7 @@ func gitClone(gitUrl string, commitSha string) (string, error) {
 	return tmpDir, nil
 }
 
-func helmDownload(chartName string, chartUrl string, version string, dest string, destOverride string) error {
+func helmDownload(chartName string, chartUrl string, version string, dest string, destOverride string, shouldPackage bool) error {
 	destination := dest
 	if destOverride != "" {
 		destination = dest + "/" + destOverride + ".tmp"
@@ -282,7 +294,12 @@ func helmDownload(chartName string, chartUrl string, version string, dest string
 		}
 	}
 
-	cmd := exec.Command("helm", "pull", "--untar", "-d", destination, chartUrl, "--version", version)
+	var cmd *exec.Cmd
+	if shouldPackage {
+        cmd = exec.Command("helm", "pull", "-d", destination, chartUrl, "--version", version)
+    } else {
+		cmd = exec.Command("helm", "pull", "--untar", "-d", destination, chartUrl, "--version", version)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.New(string(out))

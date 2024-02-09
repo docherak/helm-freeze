@@ -41,7 +41,7 @@ Running a git diff then will help to see any differences`,
 			errorsDuringSync = true
 		}
 
-		err = exec.GetAllCharts(config, configFile)
+		err = exec.GetAllCharts(config, configFile, shouldPackage)
 		if err != nil {
 			fmt.Printf("Error message: %s", err)
 			os.Exit(1)
@@ -60,4 +60,6 @@ func init() {
 
 	syncCmd.Flags().StringP("config-file", "f", "./helm-freeze.yaml", "Configuration file")
 	syncCmd.Flags().StringSlice("only-charts", []string{}, "Sync only specified charts, comma separated")
+	syncCmd.Flags().BoolVarP(&shouldPackage, "package", "p", false, "Package the charts after syncing")
+
 }
